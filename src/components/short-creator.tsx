@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
+import AIProcessor from "@/components/ai-processor";
 import {
   Play,
   Pause,
@@ -17,6 +18,8 @@ import {
   Upload,
   Volume2,
   Settings,
+  Sparkles,
+  Brain,
 } from "lucide-react";
 
 interface VideoSegment {
@@ -24,6 +27,8 @@ interface VideoSegment {
   start: number;
   end: number;
   duration: number;
+  title?: string;
+  confidence?: number;
 }
 
 interface Caption {
@@ -65,6 +70,7 @@ export default function ShortCreator() {
   ]);
   const [musicVolume, setMusicVolume] = useState([50]);
   const [selectedMusic, setSelectedMusic] = useState("trending-beat-1");
+  const [showAIProcessor, setShowAIProcessor] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -72,6 +78,35 @@ export default function ShortCreator() {
     if (file) {
       setVideoFile(file);
     }
+  };
+
+  const handleAIProcessingComplete = (data: {
+    segments: Array<{
+      id: string;
+      start: number;
+      end: number;
+      title: string;
+      confidence: number;
+      duration: number;
+    }>;
+    captions: Array<{
+      id: string;
+      start: number;
+      end: number;
+      text: string;
+      style: {
+        fontSize: number;
+        color: string;
+        position: string;
+        animation: string;
+      };
+    }>;
+    highlights: Array<{ timestamp: number; description: string; type: string }>;
+  }) => {
+    // Replace existing segments and captions with AI-generated ones
+    setSegments(data.segments);
+    setCaptions(data.captions);
+    setShowAIProcessor(false);
   };
 
   const addSegment = () => {
@@ -120,9 +155,12 @@ export default function ShortCreator() {
     <div className="min-h-screen bg-black text-white">
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-4">Short Creator Studio</h1>
+          <h1 className="text-3xl font-bold mb-4">
+            <span className="font-reelify text-purple-400">Reelify</span>{" "}
+            Creator Studio
+          </h1>
           <p className="text-gray-300">
-            Transform your videos into viral shorts with our powerful editor
+            Transform your videos into viral shorts with our AI-powered editor
           </p>
         </div>
 
@@ -177,6 +215,49 @@ export default function ShortCreator() {
             </div>
           </CardContent>
         </Card>
+
+        {/* AI Processor Section */}
+        {(youtubeUrl || videoFile) && (
+          <div className="mb-8">
+            {showAIProcessor ? (
+              <AIProcessor
+                videoUrl={
+                  youtubeUrl ||
+                  (videoFile ? URL.createObjectURL(videoFile) : undefined)
+                }
+                onProcessingComplete={handleAIProcessingComplete}
+              />
+            ) : (
+              <Card className="bg-gradient-to-r from-purple-900/50 to-blue-900/50 border-purple-700">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-purple-600 rounded-full flex items-center justify-center">
+                        <Brain className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-white text-lg">
+                          AI-Powered Analysis
+                        </h3>
+                        <p className="text-purple-200">
+                          Let AI automatically find the best clips and generate
+                          captions
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => setShowAIProcessor(true)}
+                      className="bg-purple-600 hover:bg-purple-700"
+                    >
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Analyze with AI
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
 
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Video Preview */}
@@ -293,9 +374,20 @@ export default function ShortCreator() {
                           className="p-3 bg-gray-800 rounded-lg border border-gray-700"
                         >
                           <div className="flex justify-between items-center mb-2">
-                            <span className="text-sm font-medium text-white">
-                              Clip {index + 1}
-                            </span>
+                            <div>
+                              <span className="text-sm font-medium text-white">
+                                {segment.title || `Clip ${index + 1}`}
+                              </span>
+                              {segment.confidence && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <Sparkles className="w-3 h-3 text-purple-400" />
+                                  <span className="text-xs text-purple-400">
+                                    {Math.round(segment.confidence * 100)}%
+                                    confidence
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                             <Button
                               size="sm"
                               variant="destructive"
@@ -306,8 +398,7 @@ export default function ShortCreator() {
                           </div>
                           <div className="text-xs text-gray-300">
                             {segment.start}s - {segment.end}s (
-                            {segment.duration}
-                            s)
+                            {segment.duration}s)
                           </div>
                         </div>
                       ))}

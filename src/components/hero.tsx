@@ -24,12 +24,13 @@ export default function Hero() {
               </div>
             </div>
 
-            <h1 className="text-5xl sm:text-6xl font-bold text-white mb-8 tracking-tight">
+            <h1 className="text-5xl sm:text-6xl font-bold text-white mb-8 tracking-tight text-center">
               Transform{" "}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
                 YouTube Videos
               </span>{" "}
-              into Viral Shorts
+              into <span className="font-reelify text-purple-400">Reelify</span>{" "}
+              Shorts
             </h1>
 
             <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto leading-relaxed">

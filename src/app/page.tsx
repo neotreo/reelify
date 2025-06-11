@@ -25,7 +25,8 @@ export default async function Home() {
         <div className="container mx-auto px-4 text-center">
           <div className="max-w-3xl mx-auto">
             <h2 className="text-3xl font-bold text-white mb-4">
-              Try Reelify Free - No Account Required
+              Try <span className="font-reelify">Reelify</span> Free - No
+              Account Required
             </h2>
             <p className="text-gray-300 mb-8">
               Test our platform instantly with any YouTube video. Free version
