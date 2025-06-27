@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "./ui/button";
 import { Progress } from "./ui/progress";
 import { Sparkles, Brain, Scissors, MessageSquare } from "lucide-react";
+import { processVideoWithAI } from "@/app/actions";
 
 interface AIProcessorProps {
   videoUrl?: string;
@@ -47,124 +48,49 @@ export default function AIProcessor({
     setProgress(0);
 
     try {
-      // Step 1: Extract audio and generate transcript
-      setCurrentStep("Extracting audio and generating transcript...");
-      setProgress(25);
-      await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulate processing
-
-      // Step 2: Analyze content with NLP
-      setCurrentStep("Analyzing content for key moments...");
-      setProgress(50);
+      // Step 1: Extract audio from YouTube
+      setCurrentStep("🎬 Extracting high-quality audio from YouTube video...");
+      setProgress(20);
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      // Step 3: Detect scenes and visual changes
-      setCurrentStep("Detecting optimal cut points...");
-      setProgress(75);
+      // Step 2: Transcribe with Whisper
+      setCurrentStep(
+        "🎤 Transcribing audio with OpenAI Whisper (1-2 minutes)...",
+      );
+      setProgress(40);
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Step 3: AI Content Analysis
+      setCurrentStep(
+        "🧠 Analyzing content for viral moments and key insights...",
+      );
+      setProgress(60);
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      // Step 4: Generate suggestions
-      setCurrentStep("Generating AI suggestions...");
+      // Step 4: Generate shorts
+      setCurrentStep("🎯 Identifying best segments for short-form content...");
+      setProgress(80);
+
+      // Call the real AI processing function
+      const result = await processVideoWithAI(videoUrl);
+
+      if (!result.success) {
+        throw new Error(result.error || "AI processing failed");
+      }
+
+      // Step 5: Finalize
+      setCurrentStep("✂️ Generating smart captions and finalizing shorts...");
       setProgress(100);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // Mock AI results formatted for short creator
-      const mockResults = {
-        segments: [
-          {
-            id: "ai-1",
-            start: 0,
-            end: 15,
-            title: "Opening Hook",
-            confidence: 0.92,
-            duration: 15,
-          },
-          {
-            id: "ai-2",
-            start: 45,
-            end: 75,
-            title: "Key Point #1",
-            confidence: 0.88,
-            duration: 30,
-          },
-          {
-            id: "ai-3",
-            start: 120,
-            end: 150,
-            title: "Viral Moment",
-            confidence: 0.95,
-            duration: 30,
-          },
-          {
-            id: "ai-4",
-            start: 200,
-            end: 230,
-            title: "Call to Action",
-            confidence: 0.85,
-            duration: 30,
-          },
-        ],
-        captions: [
-          {
-            id: "cap-1",
-            start: 0,
-            end: 3,
-            text: "Welcome back to my channel!",
-            style: {
-              fontSize: 24,
-              color: "#ffffff",
-              position: "bottom",
-              animation: "fade-in",
-            },
-          },
-          {
-            id: "cap-2",
-            start: 3,
-            end: 8,
-            text: "Today we're talking about something amazing",
-            style: {
-              fontSize: 24,
-              color: "#ffffff",
-              position: "bottom",
-              animation: "slide-up",
-            },
-          },
-          {
-            id: "cap-3",
-            start: 8,
-            end: 15,
-            text: "that will change everything you know",
-            style: {
-              fontSize: 24,
-              color: "#ffffff",
-              position: "bottom",
-              animation: "bounce",
-            },
-          },
-        ],
-        highlights: [
-          {
-            timestamp: 67,
-            description: "High engagement moment detected",
-            type: "engagement",
-          },
-          {
-            timestamp: 134,
-            description: "Emotional peak identified",
-            type: "emotion",
-          },
-          {
-            timestamp: 201,
-            description: "Action sequence detected",
-            type: "visual",
-          },
-        ],
-      };
-
-      onProcessingComplete(mockResults);
-      setCurrentStep("AI analysis complete!");
+      onProcessingComplete(result.data);
+      setCurrentStep("🚀 Processing complete! Your viral shorts are ready!");
     } catch (error) {
       console.error("AI processing failed:", error);
-      setCurrentStep("Processing failed. Please try again.");
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Processing failed. Please try again.";
+      setCurrentStep(`❌ ${errorMessage}`);
     } finally {
       setIsProcessing(false);
     }

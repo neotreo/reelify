@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   ArrowUpRight,
@@ -51,6 +53,34 @@ export default function Hero() {
                 <div className="absolute bottom-4 left-4 text-white text-sm font-medium">
                   ✨ Live Demo: YouTube → TikTok in seconds
                 </div>
+              </div>
+            </div>
+
+            {/* Quick YouTube URL Input */}
+            <div className="mb-8 max-w-md mx-auto">
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  placeholder="Paste YouTube URL here..."
+                  className="flex-1 px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  id="hero-youtube-url"
+                />
+                <button
+                  onClick={() => {
+                    const input = document.getElementById(
+                      "hero-youtube-url",
+                    ) as HTMLInputElement;
+                    const url = input?.value;
+                    if (url) {
+                      window.location.href = `/dashboard?url=${encodeURIComponent(url)}`;
+                    } else {
+                      window.location.href = "/dashboard";
+                    }
+                  }}
+                  className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                >
+                  Convert Now
+                </button>
               </div>
             </div>
 

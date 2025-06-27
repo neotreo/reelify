@@ -1,19 +1,20 @@
 import { TempoInit } from "@/components/tempo-init";
 import type { Metadata } from "next";
-import { Inter, Orbitron } from "next/font/google";
+import { Inter, Dancing_Script } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
-const orbitron = Orbitron({
+const dancingScript = Dancing_Script({
   subsets: ["latin"],
-  variable: "--font-orbitron",
+  variable: "--font-dancing-script",
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Tempo - Modern SaaS Starter",
-  description: "A modern full-stack starter template powered by Next.js",
+  title: "Reelify - YouTube to Shorts Converter",
+  description:
+    "Transform YouTube videos into viral shorts with AI-powered editing",
 };
 
 export default function RootLayout({
@@ -23,11 +24,30 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <Script src="https://api.tempolabs.ai/proxy-asset?url=https://storage.googleapis.com/tempo-public-assets/error-handling.js" />
-      <body className={`${inter.className} ${orbitron.variable}`}>
-        {children}
+      <Script src="https://api.tempo.new/proxy-asset?url=https://storage.googleapis.com/tempo-public-assets/error-handling.js" />
+      <body className={`${inter.className} ${dancingScript.variable}`}>
+        <ErrorBoundary>{children}</ErrorBoundary>
         <TempoInit />
       </body>
     </html>
   );
+}
+
+function ErrorBoundary({ children }: { children: React.ReactNode }) {
+  try {
+    return <>{children}</>;
+  } catch (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">
+            Something went wrong
+          </h1>
+          <p className="text-gray-600">
+            Please refresh the page and try again.
+          </p>
+        </div>
+      </div>
+    );
+  }
 }

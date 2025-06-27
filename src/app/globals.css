@@ -70,8 +70,8 @@
 
 @layer utilities {
   .font-reelify {
-    font-family: var(--font-orbitron), system-ui, sans-serif;
+    font-family: var(--font-dancing-script), cursive;
     font-weight: 700;
-    letter-spacing: -0.025em;
+    letter-spacing: 0.025em;
   }
 }
