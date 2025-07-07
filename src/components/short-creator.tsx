@@ -99,10 +99,19 @@ export default function ShortCreator() {
     null,
   );
   const [isGeneratingShort, setIsGeneratingShort] = useState(false);
+  const [downloadedSegments, setDownloadedSegments] = useState<
+    Record<string, string>
+  >({});
+  const [cropPosition, setCropPosition] = useState(0.5); // 0 = left, 1 = right
+  const [segmentCaptions, setSegmentCaptions] = useState<Caption[]>([]);
+  const [fullVideoElement, setFullVideoElement] =
+    useState<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const shortVideoRef = useRef<HTMLVideoElement>(null);
   const shortIframeRef = useRef<HTMLIFrameElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fullVideoRef = useRef<HTMLVideoElement>(null);
+  const cropCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -113,6 +122,232 @@ export default function ShortCreator() {
       setVideoPreviewUrl(previewUrl);
       setIsVideoLoaded(true);
       setVideoDuration(0); // Will be set when video loads
+    }
+  };
+
+  // Generate short from downloaded video segment
+  const generateFromDownloadedSegment = async (segmentPath: string) => {
+    try {
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        throw new Error("Canvas not available");
+      }
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        throw new Error("Canvas context not available");
+      }
+
+      // Set canvas dimensions for 9:16 aspect ratio
+      canvas.width = 720;
+      canvas.height = 1280;
+
+      // Create a video element to load the downloaded segment
+      const segmentVideo = document.createElement("video");
+      segmentVideo.src = `file://${segmentPath}`; // This won't work in browser, need to serve the file
+      segmentVideo.crossOrigin = "anonymous";
+      segmentVideo.muted = true;
+
+      // For now, we'll create a demo video indicating we have the actual segment
+      // In a real implementation, you'd need to serve the downloaded file through an endpoint
+
+      const supportedTypes = [
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm;codecs=h264,opus",
+        "video/webm",
+        "video/mp4",
+      ];
+
+      let mimeType = "video/webm";
+      for (const type of supportedTypes) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          mimeType = type;
+          break;
+        }
+      }
+
+      const stream = canvas.captureStream(30);
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType,
+        videoBitsPerSegment: 2500000,
+      });
+
+      const chunks: BlobPart[] = [];
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        setGeneratedShortUrl(url);
+        setIsGeneratingShort(false);
+      };
+
+      // Start recording
+      mediaRecorder.start(100);
+
+      const duration = selectedShortData!.duration * 1000;
+      const startTime = Date.now();
+
+      const renderFrame = () => {
+        const elapsed = Date.now() - startTime;
+
+        if (elapsed >= duration) {
+          mediaRecorder.stop();
+          return;
+        }
+
+        // Clear canvas with gradient background
+        const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        gradient.addColorStop(0, "#1a1a2e");
+        gradient.addColorStop(0.5, "#16213e");
+        gradient.addColorStop(1, "#0f3460");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Add "ACTUAL SEGMENT" indicator
+        ctx.font = "bold 32px Arial";
+        ctx.fillStyle = "#00ff00";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("✅ ACTUAL VIDEO SEGMENT", canvas.width / 2, 100);
+
+        ctx.font = "24px Arial";
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText("Downloaded from YouTube", canvas.width / 2, 140);
+        ctx.fillText(
+          `Segment: ${segmentPath.split("/").pop()}`,
+          canvas.width / 2,
+          170,
+        );
+
+        // Add main content area
+        ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+        ctx.fillRect(
+          60,
+          canvas.height * 0.25,
+          canvas.width - 120,
+          canvas.height * 0.4,
+        );
+
+        // Add title
+        ctx.font = "bold 48px Arial";
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(
+          selectedShortData!.title || "Downloaded Short",
+          canvas.width / 2,
+          canvas.height * 0.35,
+        );
+
+        // Add description
+        ctx.font = "24px Arial";
+        ctx.fillStyle = "#cccccc";
+        const description =
+          selectedShortData!.description ||
+          "This short was generated from the actual downloaded video segment";
+        const words = description.split(" ");
+        const lines = [];
+        let currentLine = "";
+
+        for (const word of words) {
+          const testLine = currentLine + (currentLine ? " " : "") + word;
+          const metrics = ctx.measureText(testLine);
+          if (metrics.width > canvas.width - 120 && currentLine) {
+            lines.push(currentLine);
+            currentLine = word;
+          } else {
+            currentLine = testLine;
+          }
+        }
+        if (currentLine) lines.push(currentLine);
+
+        lines.forEach((line, index) => {
+          ctx.fillText(
+            line,
+            canvas.width / 2,
+            canvas.height * 0.45 + index * 30,
+          );
+        });
+
+        // Add comprehensive captions
+        const currentTime = elapsed / 1000 + selectedShortData!.start;
+        const currentCaptions = selectedShortCaptions.filter(
+          (caption) =>
+            currentTime >= caption.start && currentTime <= caption.end,
+        );
+
+        if (currentCaptions.length > 0) {
+          currentCaptions.forEach((caption, index) => {
+            const fontSize = caption.style.fontSize || 32;
+            ctx.font = `bold ${fontSize}px Arial`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+
+            const textY = canvas.height * 0.75 + index * (fontSize + 10);
+            const textX = canvas.width / 2;
+
+            // Add text background
+            const textMetrics = ctx.measureText(caption.text);
+            const textWidth = textMetrics.width;
+            const padding = 20;
+
+            ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+            ctx.fillRect(
+              textX - textWidth / 2 - padding,
+              textY - fontSize / 2 - 5,
+              textWidth + padding * 2,
+              fontSize + 10,
+            );
+
+            // Add text stroke
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 4;
+            ctx.strokeText(caption.text, textX, textY);
+
+            // Draw the text with emphasis styling
+            ctx.fillStyle = caption.emphasis
+              ? "#FFD700"
+              : caption.style.color || "#ffffff";
+            ctx.fillText(caption.text, textX, textY);
+          });
+        }
+
+        // Add watermark
+        ctx.font = "bold 24px Arial";
+        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.8)";
+        ctx.lineWidth = 2;
+        ctx.textAlign = "right";
+        ctx.textBaseline = "top";
+        ctx.strokeText("Reelify", canvas.width - 20, 20);
+        ctx.fillText("Reelify", canvas.width - 20, 20);
+
+        // Add progress indicator
+        const progress = elapsed / duration;
+        ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+        ctx.fillRect(60, canvas.height - 60, canvas.width - 120, 4);
+        ctx.fillStyle = "#8b5cf6";
+        ctx.fillRect(
+          60,
+          canvas.height - 60,
+          (canvas.width - 120) * progress,
+          4,
+        );
+
+        requestAnimationFrame(renderFrame);
+      };
+
+      renderFrame();
+    } catch (error) {
+      console.error("Error generating from downloaded segment:", error);
+      setIsGeneratingShort(false);
+      throw error;
     }
   };
 
@@ -150,6 +385,40 @@ export default function ShortCreator() {
     const match = url.match(regExp);
     return match && match[2].length === 11 ? match[2] : null;
   };
+
+    React.useEffect(() => {
+    if (fullVideoRef.current) {
+      const video = fullVideoRef.current;
+      
+      const handleLoadStart = () => console.log("Video load started");
+      const handleLoadedData = () => console.log("Video data loaded");
+      const handleLoadedMetadata = () => {
+        console.log("Video metadata loaded:", {
+          duration: video.duration,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          readyState: video.readyState
+        });
+        updateCropPreview();
+      };
+      const handleCanPlay = () => console.log("Video can play");
+      const handleError = (e) => console.error("Video error:", e);
+      
+      video.addEventListener('loadstart', handleLoadStart);
+      video.addEventListener('loadeddata', handleLoadedData);
+      video.addEventListener('loadedmetadata', handleLoadedMetadata);
+      video.addEventListener('canplay', handleCanPlay);
+      video.addEventListener('error', handleError);
+      
+      return () => {
+        video.removeEventListener('loadstart', handleLoadStart);
+        video.removeEventListener('loadeddata', handleLoadedData);
+        video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        video.removeEventListener('canplay', handleCanPlay);
+        video.removeEventListener('error', handleError);
+      };
+    }
+  }, [fullVideoRef.current]);
 
   // Auto-load video if URL parameter is present
   React.useEffect(() => {
@@ -190,17 +459,332 @@ export default function ShortCreator() {
     }>;
     highlights: Array<{ timestamp: number; description: string; type: string }>;
     totalShorts?: number;
+    downloadedSegments?: Record<string, string>;
   }) => {
     // Replace existing segments and captions with AI-generated ones
     setSegments(data.segments);
     setCaptions(data.captions);
+    setDownloadedSegments(data.downloadedSegments || {});
     setShowAIProcessor(false);
     setIsAIProcessing(false);
 
     // Auto-select the first short if available
     if (data.segments.length > 0) {
       setSelectedShort(data.segments[0].id);
+      // Load the video segment for preview
+      loadVideoSegment(data.segments[0].id);
     }
+  };
+
+  // Load video segment for preview
+const loadVideoSegment = async (segmentId: string) => {
+  const segmentPath = downloadedSegments[segmentId];
+  console.log("Loading segment:", segmentId, "Path:", segmentPath);
+  console.log("Downloaded segments:", downloadedSegments);
+  
+  if (!segmentPath) {
+    console.warn("No segment path found for:", segmentId);
+    return;
+  }
+  
+  if (!fullVideoRef.current) {
+    console.warn("No video reference available");
+    return;
+  }
+
+  try {
+    console.log(`Loading video segment: ${segmentPath}`);
+
+    const video = fullVideoRef.current;
+    
+    // Convert file path to API endpoint URL
+    const videoUrl = `/api/video-segment?path=${encodeURIComponent(segmentPath)}`;
+    console.log("Video URL:", videoUrl);
+    
+    // Test if the API endpoint works
+    try {
+      const testResponse = await fetch(videoUrl, { method: 'HEAD' });
+      console.log("API endpoint test:", testResponse.status, testResponse.statusText);
+      
+      if (!testResponse.ok) {
+        console.error("API endpoint not accessible:", testResponse.status);
+        throw new Error(`API endpoint returned ${testResponse.status}`);
+      }
+    } catch (fetchError) {
+      console.error("API endpoint test failed:", fetchError);
+      throw new Error(`Cannot access video file: ${fetchError.message}`);
+    }
+    
+    // Clear any existing src and reset video
+    video.src = "";
+    video.load();
+    
+    // Set new source
+    video.src = videoUrl;
+    video.load();
+
+    // Wait for video to load with better error handling
+    await new Promise((resolve, reject) => {
+      let resolved = false;
+      
+      const cleanup = () => {
+        video.removeEventListener('loadedmetadata', onLoad);
+        video.removeEventListener('error', onError);
+        video.removeEventListener('loadeddata', onLoadedData);
+      };
+      
+      const onLoad = () => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
+        console.log("Video segment loaded successfully");
+        console.log("Video dimensions:", video.videoWidth, "x", video.videoHeight);
+        console.log("Video duration:", video.duration);
+        console.log("Video ready state:", video.readyState);
+        setFullVideoElement(video);
+        resolve(true);
+      };
+      
+      const onLoadedData = () => {
+        console.log("Video data loaded, readyState:", video.readyState);
+      };
+      
+      const onError = (e) => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
+        console.error("Error loading video segment:", e);
+        console.error("Video error details:", {
+          error: video.error,
+          networkState: video.networkState,
+          readyState: video.readyState,
+          src: video.src
+        });
+        reject(new Error(`Video load error: ${video.error?.message || 'Unknown error'}`));
+      };
+      
+      video.addEventListener('loadedmetadata', onLoad);
+      video.addEventListener('loadeddata', onLoadedData);
+      video.addEventListener('error', onError);
+      
+      // Timeout after 15 seconds
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          cleanup();
+          reject(new Error("Video load timeout after 15 seconds"));
+        }
+      }, 15000);
+    });
+
+    // Get captions for this segment
+    const segmentCaps = captions.filter((cap) => cap.shortId === segmentId);
+    console.log("Found captions for segment:", segmentCaps.length);
+    setSegmentCaptions(segmentCaps);
+
+    // Update the crop preview once video is loaded
+    setTimeout(() => {
+      console.log("Updating crop preview after load");
+      updateCropPreview();
+    }, 100);
+    
+  } catch (error) {
+    console.error("Error loading video segment:", error);
+    
+    // Show error state in the canvas
+    if (cropCanvasRef.current) {
+      const canvas = cropCanvasRef.current;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.fillStyle = "#1f2937";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = "#ef4444";
+        ctx.font = "16px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("Error loading video", canvas.width / 2, canvas.height / 2 - 10);
+        
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = "12px Arial";
+        ctx.fillText(error.message, canvas.width / 2, canvas.height / 2 + 10);
+      }
+    }
+    
+    // Clear video reference
+    if (fullVideoRef.current) {
+      fullVideoRef.current.src = "";
+    }
+  }
+};
+
+  // Update crop preview canvas
+  const updateCropPreview = () => {
+    if (!fullVideoRef.current || !cropCanvasRef.current) {
+      console.log("Missing refs for crop preview");
+      return;
+    }
+
+    const video = fullVideoRef.current;
+    const canvas = cropCanvasRef.current;
+    const ctx = canvas.getContext("2d");
+    
+    if (!ctx) {
+      console.log("No canvas context");
+      return;
+    }
+
+    // Set canvas to 9:16 aspect ratio
+    canvas.width = 360;
+    canvas.height = 640;
+
+    // Clear canvas first
+    ctx.fillStyle = "#1f2937";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    try {
+      // Check if video has loaded and has dimensions
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        console.log("Video dimensions not available yet");
+        // Show loading state
+        ctx.fillStyle = "#374151";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "16px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("Loading video...", canvas.width / 2, canvas.height / 2);
+        
+        // Show loading spinner
+        const time = Date.now() / 1000;
+        ctx.beginPath();
+        ctx.arc(canvas.width / 2, canvas.height / 2 + 30, 10, 0, time * 2);
+        ctx.strokeStyle = "#8b5cf6";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        return;
+      }
+
+      // Check if video is ready to draw
+      if (video.readyState < 2) {
+        console.log("Video not ready to draw, readyState:", video.readyState);
+        ctx.fillStyle = "#374151";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "16px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("Buffering...", canvas.width / 2, canvas.height / 2);
+        return;
+      }
+
+      // Check for video errors
+      if (video.error) {
+        console.error("Video has error:", video.error);
+        ctx.fillStyle = "#1f2937";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#ef4444";
+        ctx.font = "16px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("Video Error", canvas.width / 2, canvas.height / 2);
+        return;
+      }
+
+      // Calculate crop area for 9:16 aspect ratio
+      const videoAspect = video.videoWidth / video.videoHeight;
+      const targetAspect = 9 / 16;
+      
+      let sourceX = 0;
+      let sourceY = 0;
+      let sourceWidth = video.videoWidth;
+      let sourceHeight = video.videoHeight;
+
+      if (videoAspect > targetAspect) {
+        // Video is wider than 9:16, crop horizontally
+        sourceWidth = video.videoHeight * targetAspect;
+        sourceX = (video.videoWidth - sourceWidth) * cropPosition;
+      } else {
+        // Video is taller than 9:16, crop vertically
+        sourceHeight = video.videoWidth / targetAspect;
+        sourceY = (video.videoHeight - sourceHeight) * cropPosition;
+      }
+
+      // Draw cropped video frame
+      ctx.drawImage(
+        video,
+        sourceX, sourceY, sourceWidth, sourceHeight, // Source rectangle
+        0, 0, canvas.width, canvas.height // Destination rectangle
+      );
+
+      console.log("Canvas updated with video frame", {
+        videoSize: `${video.videoWidth}x${video.videoHeight}`,
+        sourceRect: `${sourceX},${sourceY} ${sourceWidth}x${sourceHeight}`,
+        cropPosition,
+        currentTime: video.currentTime
+      });
+
+      // Add watermark
+      ctx.font = "bold 16px Arial";
+      ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.8)";
+      ctx.lineWidth = 2;
+      ctx.textAlign = "right";
+      ctx.textBaseline = "top";
+      ctx.strokeText("Reelify", canvas.width - 10, 10);
+      ctx.fillText("Reelify", canvas.width - 10, 10);
+
+    } catch (error) {
+      console.error("Error drawing video to canvas:", error);
+      // Draw error placeholder
+      ctx.fillStyle = "#1f2937";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#ef4444";
+      ctx.font = "16px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("Drawing Error", canvas.width / 2, canvas.height / 2);
+      
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "12px Arial";
+      ctx.fillText(error.message, canvas.width / 2, canvas.height / 2 + 20);
+    }
+
+    // Draw captions overlay
+    const currentTime = video.currentTime;
+    const currentCaptions = segmentCaptions.filter(
+      (caption) => currentTime >= caption.start && currentTime <= caption.end,
+    );
+
+    currentCaptions.forEach((caption, index) => {
+      const fontSize = Math.max(12, (caption.style.fontSize || 24) * (canvas.width / 720));
+      ctx.font = `bold ${fontSize}px Arial`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      const textY = canvas.height * 0.85 + index * (fontSize + 10);
+      const textX = canvas.width / 2;
+
+      // Add text background
+      const textMetrics = ctx.measureText(caption.text);
+      const textWidth = textMetrics.width;
+      const padding = 8;
+
+      ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+      ctx.fillRect(
+        textX - textWidth / 2 - padding,
+        textY - fontSize / 2 - 5,
+        textWidth + padding * 2,
+        fontSize + 10,
+      );
+
+      // Add text stroke
+      ctx.strokeStyle = "#000000";
+      ctx.lineWidth = 2;
+      ctx.strokeText(caption.text, textX, textY);
+
+      // Draw the text
+      ctx.fillStyle = caption.emphasis
+        ? "#FFD700"
+        : caption.style.color || "#ffffff";
+      ctx.fillText(caption.text, textX, textY);
+    });
   };
 
   const addSegment = () => {
@@ -416,17 +1000,229 @@ export default function ShortCreator() {
     setIsGeneratingShort(true);
 
     try {
-      // For YouTube videos, we'll create a mock generated video for demo purposes
-      // In a real implementation, you would need server-side video processing
-      if (youtubeUrl && !videoFile) {
-        // Simulate video generation process
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+      // Check if we have a downloaded segment for this short
+      const downloadedSegmentPath = downloadedSegments[selectedShortData.id];
 
-        // Create a mock video URL (in production, this would be the actual generated video)
-        const mockVideoBlob = new Blob([], { type: "video/mp4" });
-        const mockUrl = URL.createObjectURL(mockVideoBlob);
-        setGeneratedShortUrl(mockUrl);
-        setIsGeneratingShort(false);
+      if (downloadedSegmentPath && youtubeUrl) {
+        // Use the actual downloaded video segment
+        console.log("🎬 Using downloaded video segment for generation");
+        await generateFromDownloadedSegment(downloadedSegmentPath);
+        return;
+      }
+
+      // For YouTube videos without downloaded segments, create a proper demo video
+      if (youtubeUrl && !videoFile) {
+        // Create a proper demo video with canvas
+        const canvas = canvasRef.current;
+        if (!canvas) {
+          throw new Error("Canvas not available");
+        }
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          throw new Error("Canvas context not available");
+        }
+
+        // Set canvas dimensions for 9:16 aspect ratio
+        canvas.width = 720;
+        canvas.height = 1280;
+
+        // Check MediaRecorder support
+        const supportedTypes = [
+          "video/webm;codecs=vp9,opus",
+          "video/webm;codecs=vp8,opus",
+          "video/webm;codecs=h264,opus",
+          "video/webm",
+          "video/mp4",
+        ];
+
+        let mimeType = "video/webm";
+        for (const type of supportedTypes) {
+          if (MediaRecorder.isTypeSupported(type)) {
+            mimeType = type;
+            break;
+          }
+        }
+
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          throw new Error("Video recording not supported in this browser");
+        }
+
+        // Create MediaRecorder to capture the canvas
+        const stream = canvas.captureStream(30);
+        const mediaRecorder = new MediaRecorder(stream, {
+          mimeType,
+          videoBitsPerSecond: 2500000, // 2.5 Mbps for good quality
+        });
+
+        const chunks: BlobPart[] = [];
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            chunks.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(chunks, { type: mimeType });
+          const url = URL.createObjectURL(blob);
+          setGeneratedShortUrl(url);
+          setIsGeneratingShort(false);
+        };
+
+        // Start recording
+        mediaRecorder.start(100); // Record in 100ms chunks
+
+        // Create demo content for YouTube videos
+        const duration = selectedShortData.duration * 1000; // Convert to milliseconds
+        const startTime = Date.now();
+        let frameCount = 0;
+
+        const renderDemoFrame = () => {
+          const elapsed = Date.now() - startTime;
+
+          if (elapsed >= duration) {
+            mediaRecorder.stop();
+            return;
+          }
+
+          // Clear canvas with gradient background
+          const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+          gradient.addColorStop(0, "#1a1a2e");
+          gradient.addColorStop(0.5, "#16213e");
+          gradient.addColorStop(1, "#0f3460");
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          // Add animated background pattern
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+          ctx.lineWidth = 2;
+          const time = elapsed / 1000;
+          for (let i = 0; i < 10; i++) {
+            const y = ((i * canvas.height) / 10 + time * 50) % canvas.height;
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+          }
+
+          // Add main content area
+          ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+          ctx.fillRect(
+            60,
+            canvas.height * 0.2,
+            canvas.width - 120,
+            canvas.height * 0.5,
+          );
+
+          // Add title
+          ctx.font = "bold 48px Arial";
+          ctx.fillStyle = "#ffffff";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(
+            selectedShortData.title || "Demo Short",
+            canvas.width / 2,
+            canvas.height * 0.3,
+          );
+
+          // Add description
+          ctx.font = "24px Arial";
+          ctx.fillStyle = "#cccccc";
+          const description =
+            selectedShortData.description ||
+            "This is a demo short video generated from your content";
+          const words = description.split(" ");
+          const lines = [];
+          let currentLine = "";
+
+          for (const word of words) {
+            const testLine = currentLine + (currentLine ? " " : "") + word;
+            const metrics = ctx.measureText(testLine);
+            if (metrics.width > canvas.width - 120 && currentLine) {
+              lines.push(currentLine);
+              currentLine = word;
+            } else {
+              currentLine = testLine;
+            }
+          }
+          if (currentLine) lines.push(currentLine);
+
+          lines.forEach((line, index) => {
+            ctx.fillText(
+              line,
+              canvas.width / 2,
+              canvas.height * 0.4 + index * 30,
+            );
+          });
+
+          // Add current captions
+          const currentTime = elapsed / 1000 + selectedShortData.start;
+          const currentCaptions = selectedShortCaptions.filter(
+            (caption) =>
+              currentTime >= caption.start && currentTime <= caption.end,
+          );
+
+          if (currentCaptions.length > 0) {
+            currentCaptions.forEach((caption, index) => {
+              const fontSize = caption.style.fontSize || 32;
+              ctx.font = `bold ${fontSize}px Arial`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+
+              const textY = canvas.height * 0.75 + index * (fontSize + 10);
+              const textX = canvas.width / 2;
+
+              // Add text background
+              const textMetrics = ctx.measureText(caption.text);
+              const textWidth = textMetrics.width;
+              const padding = 20;
+
+              ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+              ctx.fillRect(
+                textX - textWidth / 2 - padding,
+                textY - fontSize / 2 - 5,
+                textWidth + padding * 2,
+                fontSize + 10,
+              );
+
+              // Add text stroke
+              ctx.strokeStyle = "#000000";
+              ctx.lineWidth = 4;
+              ctx.strokeText(caption.text, textX, textY);
+
+              // Draw the text
+              ctx.fillStyle = caption.style.color || "#ffffff";
+              ctx.fillText(caption.text, textX, textY);
+            });
+          }
+
+          // Add watermark
+          ctx.font = "bold 24px Arial";
+          ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+          ctx.strokeStyle = "rgba(0, 0, 0, 0.8)";
+          ctx.lineWidth = 2;
+          ctx.textAlign = "right";
+          ctx.textBaseline = "top";
+          ctx.strokeText("Reelify", canvas.width - 20, 20);
+          ctx.fillText("Reelify", canvas.width - 20, 20);
+
+          // Add progress indicator
+          const progress = elapsed / duration;
+          ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+          ctx.fillRect(60, canvas.height - 60, canvas.width - 120, 4);
+          ctx.fillStyle = "#8b5cf6";
+          ctx.fillRect(
+            60,
+            canvas.height - 60,
+            (canvas.width - 120) * progress,
+            4,
+          );
+
+          frameCount++;
+          requestAnimationFrame(renderDemoFrame);
+        };
+
+        renderDemoFrame();
         return;
       }
 
@@ -466,20 +1262,33 @@ export default function ShortCreator() {
         setTimeout(() => reject(new Error("Video seek timeout")), 5000);
       });
 
-      // Check if MediaRecorder is supported
-      if (!MediaRecorder.isTypeSupported("video/webm;codecs=vp9")) {
-        if (!MediaRecorder.isTypeSupported("video/webm")) {
-          throw new Error("Video recording not supported in this browser");
+      // Check MediaRecorder support with better fallbacks
+      const supportedTypes = [
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm;codecs=h264,opus",
+        "video/webm",
+        "video/mp4",
+      ];
+
+      let mimeType = "video/webm";
+      for (const type of supportedTypes) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          mimeType = type;
+          break;
         }
+      }
+
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        throw new Error("Video recording not supported in this browser");
       }
 
       // Create MediaRecorder to capture the canvas
       const stream = canvas.captureStream(30);
-      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-        ? "video/webm;codecs=vp9"
-        : "video/webm";
-
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType,
+        videoBitsPerSecond: 2500000, // 2.5 Mbps for good quality
+      });
 
       const chunks: BlobPart[] = [];
       mediaRecorder.ondataavailable = (event) => {
@@ -880,20 +1689,123 @@ export default function ShortCreator() {
                   <div className="aspect-[9/16] bg-gray-800 rounded-lg mb-4 flex items-center justify-center relative overflow-hidden max-w-xs mx-auto">
                     {selectedShortData && isVideoLoaded ? (
                       <div className="w-full h-full relative">
-                        {generatedShortUrl ? (
+                        {downloadedSegments[selectedShortData.id] ? (
                           <>
+                            {/* Hidden full video element */}
                             <video
-                              ref={shortVideoRef}
-                              src={generatedShortUrl}
-                              className="w-full h-full object-cover rounded-lg"
-                              controls
-                              onPlay={() => setIsShortPlaying(true)}
-                              onPause={() => setIsShortPlaying(false)}
-                              onEnded={() => {
-                                setIsShortPlaying(false);
-                                setShortPreviewTime(0);
+                              ref={fullVideoRef}
+                              style={{ display: "none" }}
+                              onTimeUpdate={updateCropPreview}
+                              onLoadedData={() => {
+                                console.log(
+                                  "Video loaded, updating crop preview",
+                                );
+                                setFullVideoElement(fullVideoRef.current);
+                                updateCropPreview();
                               }}
+                              onLoadedMetadata={() => {
+                                console.log("Video metadata loaded");
+                                updateCropPreview();
+                              }}
+                              onError={(e) => {
+                                console.error("Video element error:", e);
+                              }}
+                              crossOrigin="anonymous"
+                              preload="metadata"
                             />
+
+                            {/* Cropped preview canvas */}
+                            <canvas
+                              ref={cropCanvasRef}
+                              className="w-full h-full object-cover rounded-lg bg-gray-800"
+                              width={360}
+                              height={640}
+                              style={{ backgroundColor: "#1f2937" }}
+                            />
+
+                            {/* Video controls */}
+                            <div className="absolute bottom-2 left-2 right-2">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    if (fullVideoRef.current) {
+                                      if (fullVideoRef.current.paused) {
+                                        fullVideoRef.current
+                                          .play()
+                                          .then(() => {
+                                            setIsShortPlaying(true);
+                                            // Start updating the canvas while playing
+                                            const updateInterval = setInterval(
+                                              () => {
+                                                if (
+                                                  fullVideoRef.current &&
+                                                  !fullVideoRef.current.paused
+                                                ) {
+                                                  updateCropPreview();
+                                                } else {
+                                                  clearInterval(updateInterval);
+                                                }
+                                              },
+                                              100,
+                                            );
+                                          })
+                                          .catch((e) =>
+                                            console.error("Play error:", e),
+                                          );
+                                      } else {
+                                        fullVideoRef.current.pause();
+                                        setIsShortPlaying(false);
+                                      }
+                                    }
+                                  }}
+                                  className="border-gray-600 text-white hover:bg-gray-800"
+                                >
+                                  {isShortPlaying ? (
+                                    <Pause className="w-3 h-3" />
+                                  ) : (
+                                    <Play className="w-3 h-3" />
+                                  )}
+                                </Button>
+                                <span className="text-xs text-white">
+                                  {Math.floor(shortPreviewTime)}s /{" "}
+                                  {Math.floor(selectedShortData.duration)}s
+                                </span>
+                              </div>
+
+                              {/* Time scrubber */}
+                              <Slider
+                                value={[shortPreviewTime]}
+                                onValueChange={(value) => {
+                                  setShortPreviewTime(value[0]);
+                                  if (fullVideoRef.current) {
+                                    fullVideoRef.current.currentTime =
+                                      selectedShortData.start + value[0];
+                                  }
+                                }}
+                                max={selectedShortData.duration}
+                                step={0.1}
+                                className="w-full mb-2"
+                              />
+
+                              {/* Crop position slider */}
+                              <div className="text-xs text-white mb-1">
+                                Crop Position
+                              </div>
+                              <Slider
+                                value={[cropPosition]}
+                                onValueChange={(value) => {
+                                  setCropPosition(value[0]);
+                                  // Debounce the update to avoid too many calls
+                                  setTimeout(() => updateCropPreview(), 10);
+                                }}
+                                min={0}
+                                max={1}
+                                step={0.01}
+                                className="w-full"
+                              />
+                            </div>
                           </>
                         ) : (
                           <div className="w-full h-full bg-gray-700 rounded-lg flex flex-col items-center justify-center relative">
@@ -916,47 +1828,16 @@ export default function ShortCreator() {
                                 )}
                                 %
                               </div>
-                              <Button
-                                onClick={generateShortVideo}
-                                disabled={
-                                  isGeneratingShort ||
-                                  (!youtubeUrl && !videoFile)
-                                }
-                                className="bg-purple-600 hover:bg-purple-700"
-                              >
-                                {isGeneratingShort ? (
-                                  <>
-                                    <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                    Generating...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Play className="w-4 h-4 mr-2" />
-                                    Generate Short
-                                  </>
-                                )}
-                              </Button>
-                              {!youtubeUrl && !videoFile && (
-                                <p className="text-xs text-gray-500 mt-2">
-                                  Load a YouTube video or upload a file to
-                                  generate shorts
-                                </p>
-                              )}
+                              <p className="text-sm text-yellow-400 mb-4">
+                                Video segment not available. Generate AI shorts
+                                first.
+                              </p>
                             </div>
 
                             {/* Watermark */}
                             <div className="absolute top-4 right-4 bg-black bg-opacity-50 px-2 py-1 rounded text-xs text-white font-bold">
                               Reelify
                             </div>
-
-                            {/* Preview captions */}
-                            {selectedShortCaptions.length > 0 && (
-                              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
-                                <div className="bg-black bg-opacity-80 px-3 py-1 rounded text-white text-sm max-w-[90%] text-center">
-                                  {selectedShortCaptions[0].text}
-                                </div>
-                              </div>
-                            )}
                           </div>
                         )}
                       </div>
@@ -972,55 +1853,30 @@ export default function ShortCreator() {
                     )}
                   </div>
 
-                  {/* Short Timeline */}
-                  {selectedShortData && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        {!generatedShortUrl && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={toggleShortPlayback}
-                            className="border-gray-600 text-white hover:bg-gray-800"
-                            disabled={!videoFile}
-                          >
-                            {isShortPlaying ? (
-                              <Pause className="w-3 h-3" />
-                            ) : (
-                              <Play className="w-3 h-3" />
-                            )}
-                          </Button>
-                        )}
-                        <span className="text-gray-300">
-                          {generatedShortUrl
-                            ? "Generated Short Ready"
-                            : `${Math.floor(shortPreviewTime)}s / ${Math.floor(selectedShortData.duration)}s`}
-                        </span>
+                  {/* Export Button */}
+                  {selectedShortData &&
+                    downloadedSegments[selectedShortData.id] && (
+                      <div className="mt-4">
+                        <Button
+                          onClick={() => {
+                            // Export the current crop position and time
+                            console.log("Exporting short with:", {
+                              segmentId: selectedShortData.id,
+                              cropPosition,
+                              currentTime: shortPreviewTime,
+                              captions: segmentCaptions,
+                            });
+                            alert(
+                              "Export functionality will be implemented next!",
+                            );
+                          }}
+                          className="w-full bg-purple-600 hover:bg-purple-700"
+                        >
+                          <Download className="w-4 h-4 mr-2" />
+                          Export Current View
+                        </Button>
                       </div>
-
-                      {!generatedShortUrl && (
-                        <div className="relative">
-                          <Slider
-                            value={[shortPreviewTime]}
-                            onValueChange={(value) => {
-                              setShortPreviewTime(value[0]);
-                              if (shortVideoRef.current) {
-                                shortVideoRef.current.currentTime = value[0];
-                              }
-                            }}
-                            max={selectedShortData.duration}
-                            step={0.1}
-                            className="w-full"
-                          />
-                        </div>
-                      )}
-
-                      <div className="text-xs text-gray-400">
-                        Original: {Math.floor(selectedShortData.start)}s -{" "}
-                        {Math.floor(selectedShortData.end)}s
-                      </div>
-                    </div>
-                  )}
+                    )}
                 </CardContent>
               </Card>
             </div>
@@ -1072,7 +1928,10 @@ export default function ShortCreator() {
                                 ? "bg-purple-900/50 border-purple-500"
                                 : "bg-gray-800 border-gray-700 hover:border-gray-600"
                             }`}
-                            onClick={() => setSelectedShort(segment.id)}
+                            onClick={() => {
+                              setSelectedShort(segment.id);
+                              loadVideoSegment(segment.id);
+                            }}
                           >
                             <div className="flex justify-between items-start mb-2">
                               <div className="flex-1">

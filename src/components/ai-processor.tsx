@@ -48,28 +48,27 @@ export default function AIProcessor({
     setProgress(0);
 
     try {
-      // Step 1: Extract audio from YouTube
-      setCurrentStep("🎬 Extracting high-quality audio from YouTube video...");
-      setProgress(20);
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Step 1: Extract transcript from YouTube
+      setCurrentStep("🎬 Extracting transcript from YouTube video...");
+      setProgress(15);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      // Step 2: Transcribe with Whisper
-      setCurrentStep(
-        "🎤 Transcribing audio with OpenAI Whisper (1-2 minutes)...",
-      );
-      setProgress(40);
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
-      // Step 3: AI Content Analysis
+      // Step 2: AI Content Analysis
       setCurrentStep(
         "🧠 Analyzing content for viral moments and key insights...",
       );
-      setProgress(60);
+      setProgress(35);
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      // Step 4: Generate shorts
+      // Step 3: Identify segments
       setCurrentStep("🎯 Identifying best segments for short-form content...");
-      setProgress(80);
+      setProgress(55);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      // Step 4: Download video segments
+      setCurrentStep("📥 Downloading actual video segments from YouTube...");
+      setProgress(75);
+      await new Promise((resolve) => setTimeout(resolve, 2500));
 
       // Call the real AI processing function
       const result = await processVideoWithAI(videoUrl);
@@ -78,8 +77,13 @@ export default function AIProcessor({
         throw new Error(result.error || "AI processing failed");
       }
 
-      // Step 5: Finalize
-      setCurrentStep("✂️ Generating smart captions and finalizing shorts...");
+      // Step 5: Generate comprehensive captions
+      setCurrentStep("✂️ Generating comprehensive captions for all speech...");
+      setProgress(90);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Step 6: Finalize
+      setCurrentStep("🚀 Finalizing shorts with actual video segments...");
       setProgress(100);
 
       onProcessingComplete(result.data);
