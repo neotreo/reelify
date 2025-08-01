@@ -23,11 +23,17 @@ async function testYtDlp() {
     await fs.access(ytdlpPath);
     console.log('✅ yt-dlp binary exists');
     
-    // Test version
+    // Check if it's executable
+    const stats = await fs.stat(ytdlpPath);
+    console.log(`📊 File size: ${stats.size} bytes`);
+    console.log(`🔐 Permissions: ${stats.mode.toString(8)}`);
+    
+    // Test version with proper escaping
     return new Promise((resolve, reject) => {
-      exec(`"${ytdlpPath}" --version`, (error, stdout, stderr) => {
+      exec(`${ytdlpPath} --version`, (error, stdout, stderr) => {
         if (error) {
           console.log('❌ yt-dlp version check failed:', error.message);
+          console.log('❌ stderr:', stderr);
           reject(error);
         } else {
           console.log('✅ yt-dlp version:', stdout.trim());
@@ -36,8 +42,25 @@ async function testYtDlp() {
       });
     });
   } catch (error) {
-    console.log('❌ yt-dlp binary not found or not accessible');
-    throw error;
+    console.log('❌ yt-dlp binary not found at:', ytdlpPath);
+    
+    // Check if it exists in default location
+    try {
+      return new Promise((resolve, reject) => {
+        exec('yt-dlp --version', (error, stdout, stderr) => {
+          if (error) {
+            console.log('❌ yt-dlp not found in PATH either');
+            reject(error);
+          } else {
+            console.log('✅ Found yt-dlp in PATH, version:', stdout.trim());
+            resolve(stdout.trim());
+          }
+        });
+      });
+    } catch (pathError) {
+      console.log('❌ yt-dlp not available anywhere');
+      throw error;
+    }
   }
 }
 
@@ -68,11 +91,31 @@ async function testDirectAPI() {
       
       if (response.ok) {
         const text = await response.text();
+        console.log(`   Response length: ${text.length} chars`);
+        
         if (text.length > 0) {
           console.log(`   ✅ Got response (${text.length} chars)`);
           console.log(`   Preview: ${text.substring(0, 200)}...`);
+          
+          // Try to parse as JSON
+          if (text.includes('{"events":')) {
+            try {
+              const data = JSON.parse(text);
+              if (data.events && data.events.length > 0) {
+                console.log(`   📝 Found ${data.events.length} caption events`);
+                return text;
+              }
+            } catch (parseError) {
+              console.log(`   ⚠️ JSON parse failed: ${parseError.message}`);
+            }
+          }
+          
           return text;
+        } else {
+          console.log(`   ❌ Empty response`);
         }
+      } else {
+        console.log(`   ❌ HTTP error: ${response.status} ${response.statusText}`);
       }
     } catch (error) {
       console.log(`   ❌ Failed: ${error.message}`);
@@ -90,6 +133,9 @@ async function testYtDlpSubs() {
   const ytdlpPath = path.join(process.cwd(), 'bin', 'yt-dlp');
   
   return new Promise((resolve, reject) => {
+    // Use a simpler output pattern that doesn't confuse the shell
+    const outputPattern = 'debug-subs';
+    
     const args = [
       TEST_VIDEO_URL,
       '--write-subs',
@@ -98,45 +144,62 @@ async function testYtDlpSubs() {
       '--sub-format', 'vtt',
       '--skip-download',
       '--no-warnings',
-      '-o', 'debug-subs.%(ext)s'
+      '-o', `${outputPattern}.%(ext)s`
     ];
     
-    console.log(`🔍 Running: ${ytdlpPath} ${args.join(' ')}`);
+    const command = `${ytdlpPath} "${TEST_VIDEO_URL}" --write-subs --write-auto-subs --sub-langs en --sub-format vtt --skip-download --no-warnings -o "${outputPattern}.%(ext)s"`;
     
-    exec(`"${ytdlpPath}" ${args.join(' ')}`, async (error, stdout, stderr) => {
+    console.log(`🔍 Running: ${command}`);
+    
+    exec(command, async (error, stdout, stderr) => {
       if (error) {
         console.log('❌ yt-dlp subtitle extraction failed:', error.message);
         console.log('Stderr:', stderr);
-        reject(error);
+        
+        // Try with system yt-dlp if local one fails
+        const systemCommand = `yt-dlp "${TEST_VIDEO_URL}" --write-subs --write-auto-subs --sub-langs en --sub-format vtt --skip-download --no-warnings -o "${outputPattern}.%(ext)s"`;
+        console.log(`🔄 Trying system yt-dlp: ${systemCommand}`);
+        
+        exec(systemCommand, async (sysError, sysStdout, sysStderr) => {
+          if (sysError) {
+            console.log('❌ System yt-dlp also failed:', sysError.message);
+            reject(error);
+          } else {
+            console.log('✅ System yt-dlp worked');
+            await checkSubtitleFiles(outputPattern, resolve, reject);
+          }
+        });
       } else {
         console.log('✅ yt-dlp subtitle extraction completed');
         console.log('Stdout:', stdout);
-        
-        // Check if subtitle file was created
-        try {
-          const files = await fs.readdir('.');
-          const vttFile = files.find(f => f.includes('debug-subs') && f.endsWith('.vtt'));
-          
-          if (vttFile) {
-            console.log(`📄 Found subtitle file: ${vttFile}`);
-            const content = await fs.readFile(vttFile, 'utf-8');
-            console.log(`📝 Subtitle content (${content.length} chars):`);
-            console.log(content.substring(0, 500));
-            
-            // Clean up
-            await fs.unlink(vttFile);
-            resolve(content);
-          } else {
-            console.log('❌ No subtitle file found');
-            resolve(null);
-          }
-        } catch (readError) {
-          console.log('❌ Error reading subtitle file:', readError.message);
-          reject(readError);
-        }
+        await checkSubtitleFiles(outputPattern, resolve, reject);
       }
     });
   });
+}
+
+async function checkSubtitleFiles(outputPattern, resolve, reject) {
+  try {
+    const files = await fs.readdir('.');
+    const vttFile = files.find(f => f.includes(outputPattern) && f.endsWith('.vtt'));
+    
+    if (vttFile) {
+      console.log(`📄 Found subtitle file: ${vttFile}`);
+      const content = await fs.readFile(vttFile, 'utf-8');
+      console.log(`📝 Subtitle content (${content.length} chars):`);
+      console.log(content.substring(0, 500));
+      
+      // Clean up
+      await fs.unlink(vttFile);
+      resolve(content);
+    } else {
+      console.log('❌ No subtitle file found. Available files:', files.filter(f => f.includes(outputPattern)));
+      resolve(null);
+    }
+  } catch (readError) {
+    console.log('❌ Error reading subtitle file:', readError.message);
+    reject(readError);
+  }
 }
 
 // Test 4: Try audio download
@@ -146,56 +209,94 @@ async function testAudioDownload() {
   const ytdlpPath = path.join(process.cwd(), 'bin', 'yt-dlp');
   
   return new Promise((resolve, reject) => {
-    const args = [
-      TEST_VIDEO_URL,
-      '--extract-audio',
-      '--audio-format', 'wav',
-      '--audio-quality', '0',
-      '--no-warnings',
-      '-o', 'debug-audio.%(ext)s'
-    ];
+    const outputPattern = 'debug-audio';
     
-    console.log(`🔍 Running: ${ytdlpPath} ${args.join(' ')}`);
+    const command = `${ytdlpPath} "${TEST_VIDEO_URL}" --extract-audio --audio-format wav --audio-quality 0 --no-warnings -o "${outputPattern}.%(ext)s"`;
     
-    exec(`"${ytdlpPath}" ${args.join(' ')}`, async (error, stdout, stderr) => {
+    console.log(`🔍 Running: ${command}`);
+    
+    exec(command, async (error, stdout, stderr) => {
       if (error) {
         console.log('❌ Audio download failed:', error.message);
         console.log('Stderr:', stderr);
-        reject(error);
+        
+        // Try with system yt-dlp
+        const systemCommand = `yt-dlp "${TEST_VIDEO_URL}" --extract-audio --audio-format wav --audio-quality 0 --no-warnings -o "${outputPattern}.%(ext)s"`;
+        console.log(`🔄 Trying system yt-dlp: ${systemCommand}`);
+        
+        exec(systemCommand, async (sysError, sysStdout, sysStderr) => {
+          if (sysError) {
+            console.log('❌ System yt-dlp also failed:', sysError.message);
+            reject(error);
+          } else {
+            console.log('✅ System yt-dlp worked for audio');
+            await checkAudioFiles(outputPattern, resolve, reject);
+          }
+        });
       } else {
         console.log('✅ Audio download completed');
         console.log('Stdout:', stdout);
-        
-        // Check if audio file was created  
-        try {
-          const files = await fs.readdir('.');
-          const audioFile = files.find(f => f.includes('debug-audio') && (f.endsWith('.wav') || f.endsWith('.m4a')));
-          
-          if (audioFile) {
-            console.log(`🎵 Found audio file: ${audioFile}`);
-            const stats = await fs.stat(audioFile);
-            console.log(`📊 Audio file size: ${Math.round(stats.size / 1024 / 1024 * 100) / 100} MB`);
-            
-            // Clean up
-            await fs.unlink(audioFile);
-            resolve(audioFile);
-          } else {
-            console.log('❌ No audio file found');
-            resolve(null);
-          }
-        } catch (readError) {
-          console.log('❌ Error checking audio file:', readError.message);
-          reject(readError);
-        }
+        await checkAudioFiles(outputPattern, resolve, reject);
       }
     });
   });
+}
+
+async function checkAudioFiles(outputPattern, resolve, reject) {
+  try {
+    const files = await fs.readdir('.');
+    const audioFile = files.find(f => f.includes(outputPattern) && (f.endsWith('.wav') || f.endsWith('.m4a') || f.endsWith('.mp3')));
+    
+    if (audioFile) {
+      console.log(`🎵 Found audio file: ${audioFile}`);
+      const stats = await fs.stat(audioFile);
+      console.log(`📊 Audio file size: ${Math.round(stats.size / 1024 / 1024 * 100) / 100} MB`);
+      
+      // Clean up
+      await fs.unlink(audioFile);
+      resolve(audioFile);
+    } else {
+      console.log('❌ No audio file found. Available files:', files.filter(f => f.includes(outputPattern)));
+      resolve(null);
+    }
+  } catch (readError) {
+    console.log('❌ Error checking audio file:', readError.message);
+    reject(readError);
+  }
 }
 
 // Run all tests
 async function runAllTests() {
   try {
     console.log('🚀 Starting comprehensive debugging...\n');
+    
+    // Test 0: Install yt-dlp if missing
+    try {
+      console.log('0️⃣ Checking yt-dlp installation...');
+      const installScript = path.join(process.cwd(), 'scripts', 'install-ytdlp.js');
+      
+      try {
+        await fs.access(installScript);
+        console.log('📥 Running yt-dlp installer...');
+        
+        await new Promise((resolve, reject) => {
+          exec(`node ${installScript}`, (error, stdout, stderr) => {
+            if (error) {
+              console.log('⚠️ Install script failed, continuing with tests...');
+              resolve(null);
+            } else {
+              console.log('✅ Install script completed');
+              console.log(stdout);
+              resolve(stdout);
+            }
+          });
+        });
+      } catch (scriptError) {
+        console.log('⚠️ Install script not found, continuing...');
+      }
+    } catch (error) {
+      console.log('⚠️ yt-dlp installation check failed');
+    }
     
     // Test 1: yt-dlp binary
     try {
@@ -231,9 +332,13 @@ async function runAllTests() {
     console.log('\n🏁 Debugging complete!');
     console.log('\n📋 Summary:');
     console.log('- If Direct API worked: Your main transcript fetching should work');
-    console.log('- If yt-dlp tests failed: Audio download and subtitle fallbacks won\'t work');
+    console.log('- If yt-dlp tests failed: Install yt-dlp with: pip install yt-dlp');
     console.log('- Check your server\'s network access to YouTube');
     console.log('- Ensure yt-dlp binary has execute permissions on Linux');
+    console.log('\n🔧 Quick fixes:');
+    console.log('1. Install yt-dlp: pip install yt-dlp');
+    console.log('2. Or manually download: wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp');
+    console.log('3. Make executable: chmod +x /usr/local/bin/yt-dlp');
     
   } catch (error) {
     console.error('💥 Debug script failed:', error);

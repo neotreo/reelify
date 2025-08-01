@@ -16,10 +16,17 @@ const YTDLP_PATH = path.join(process.cwd(), 'bin', process.platform === 'win32' 
 // Helper function to create YTDlpWrap with persistent binary
 const createYTDlpWrap = () => {
   try {
+    // Try local binary first
     return new YTDlpWrap(YTDLP_PATH);
   } catch (error) {
-    console.warn('Using fallback yt-dlp installation:', error);
-    return new YTDlpWrap(); // Fallback to default installation
+    console.warn('Local yt-dlp not found, trying system installation:', error);
+    try {
+      // Try system installation
+      return new YTDlpWrap('yt-dlp');
+    } catch (systemError) {
+      console.warn('System yt-dlp not found, using default:', systemError);
+      return new YTDlpWrap(); // Fallback to default installation
+    }
   }
 };
 
