@@ -686,7 +686,7 @@ export default function ShortCreator() {
       const video = fullVideoRef.current;
 
       // Use the API route to serve the video
-      const videoUrl = `/api/video/${path.basename(segmentPath)}`;
+      const videoUrl = `/api/video-segment?path=${encodeURIComponent(segmentPath)}`;
       console.log("Using server video URL:", videoUrl);
 
       // Clear any existing src and reset video
@@ -1406,30 +1406,27 @@ export default function ShortCreator() {
         });
 
         // Check MediaRecorder support with better fallbacks
-        const supportedTypes = [
-          "video/webm;codecs=vp9,opus",
-          "video/webm;codecs=vp8,opus",
-          "video/webm;codecs=h264,opus",
-          "video/webm",
-          "video/mp4",
-        ];
-
-        let mimeType = "video/webm";
-        for (const type of supportedTypes) {
-          if (MediaRecorder.isTypeSupported(type)) {
-            mimeType = type;
-            break;
+        const getBestSupportedMimeType = () => {
+          const types = [
+            'video/webm;codecs=vp9,opus',
+            'video/webm;codecs=vp8,opus', 
+            'video/webm',
+            'video/mp4;codecs=h264,aac',
+            'video/mp4'
+          ];
+          
+          for (const type of types) {
+            if (MediaRecorder.isTypeSupported(type)) {
+              return type;
+            }
           }
-        }
-
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-          throw new Error("Video recording not supported in this browser");
-        }
+          throw new Error('No supported video recording format found');
+        };
 
         // Create MediaRecorder to capture the canvas
         const stream = canvas.captureStream(30);
         const mediaRecorder = new MediaRecorder(stream, {
-          mimeType,
+          mimeType: getBestSupportedMimeType(),
           videoBitsPerSecond: 2500000, // 2.5 Mbps for good quality
         });
 
