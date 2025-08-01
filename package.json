@@ -3,7 +3,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "postinstall": "node scripts/install-ytdlp.js",
+    "install-ytdlp": "node scripts/install-ytdlp.js"
   },
   "dependencies": {
     "@polar-sh/sdk": "^0.26.1",

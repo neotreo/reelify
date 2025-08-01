@@ -1,4 +1,4 @@
 {
     "deno.enable": true,
-    "git.enabled": false
+    "git.enabled": true
 }

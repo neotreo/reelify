@@ -114,6 +114,10 @@ export default function ShortCreator() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fullVideoRef = useRef<HTMLVideoElement>(null);
   const cropCanvasRef = useRef<HTMLCanvasElement>(null);
+  
+  // Add refs for cleanup
+  const timeoutRefs = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  const animationFrameRefs = useRef<Set<number>>(new Set());
 
   // Get selected short data - moved up to avoid reference before initialization
   const selectedShortData = segments.find(
@@ -135,36 +139,122 @@ export default function ShortCreator() {
     }
   };
 
-  // Generate clips from downloaded video segment or mock data
+  // Add cleanup effect for video elements and URLs
+  React.useEffect(() => {
+    return () => {
+      // Cleanup video elements on unmount
+      if (fullVideoRef.current) {
+        fullVideoRef.current.pause();
+        fullVideoRef.current.src = '';
+        fullVideoRef.current.load();
+      }
+      
+      if (shortVideoRef.current) {
+        shortVideoRef.current.pause();
+        shortVideoRef.current.src = '';
+        shortVideoRef.current.load();
+      }
+      
+      // Cleanup generated URLs
+      if (generatedShortUrl) {
+        URL.revokeObjectURL(generatedShortUrl);
+      }
+      
+      if (videoPreviewUrl && videoPreviewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(videoPreviewUrl);
+      }
+      
+      // Cleanup all timeouts
+      timeoutRefs.current.forEach((timeoutId: ReturnType<typeof setTimeout>) => clearTimeout(timeoutId));
+      timeoutRefs.current.clear();
+      
+      // Cleanup all animation frames
+      animationFrameRefs.current.forEach((frameId: number) => cancelAnimationFrame(frameId));
+      animationFrameRefs.current.clear();
+    };
+  }, [generatedShortUrl, videoPreviewUrl]);
+
+  // Helper functions for managed timeouts and animation frames
+  const createManagedTimeout = (callback: () => void, delay: number) => {
+    const timeoutId = setTimeout(() => {
+      timeoutRefs.current.delete(timeoutId);
+      callback();
+    }, delay);
+    timeoutRefs.current.add(timeoutId);
+    return timeoutId;
+  };
+
+  const createManagedAnimationFrame = (callback: FrameRequestCallback) => {
+    const frameId = requestAnimationFrame((time) => {
+      animationFrameRefs.current.delete(frameId);
+      callback(time);
+    });
+    animationFrameRefs.current.add(frameId);
+    return frameId;
+  };
+
+  // Fix the animation frame cleanup
+  React.useEffect(() => {
+    let animationFrameId: number;
+
+    if (isPlaying) {
+      let lastTime = Date.now();
+
+      const animateTimeline = () => {
+        if (!isPlaying) {
+          if (animationFrameId) {
+            cancelAnimationFrame(animationFrameId);
+          }
+          return;
+        }
+
+        const now = Date.now();
+        const deltaTime = (now - lastTime) / 1000;
+        lastTime = now;
+
+        let newTime = currentTime + deltaTime;
+
+        if (newTime >= videoDuration) {
+          newTime = 0;
+        }
+
+        setCurrentTime(newTime);
+
+        if (fullVideoRef.current && selectedShortData) {
+          const videoPosition =
+            (newTime / videoDuration) *
+            (fullVideoRef.current.duration || videoDuration);
+          fullVideoRef.current.currentTime = videoPosition;
+        }
+
+        animationFrameId = requestAnimationFrame(animateTimeline);
+      };
+
+      animationFrameId = requestAnimationFrame(animateTimeline);
+    }
+
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [isPlaying, currentTime, videoDuration, selectedShortData]);
+
+  // Fix MediaRecorder cleanup
   const generateFromDownloadedSegment = async (segmentPath: string) => {
     try {
       const canvas = canvasRef.current;
-      if (!canvas) {
-        throw new Error("Canvas not available");
-      }
+      if (!canvas) throw new Error("Canvas not available");
 
       const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        throw new Error("Canvas context not available");
-      }
+      if (!ctx) throw new Error("Canvas context not available");
 
-      // Set canvas dimensions for 9:16 aspect ratio
       canvas.width = 720;
       canvas.height = 1280;
-
-      // Create a video element to load the downloaded segment
-      const segmentVideo = document.createElement("video");
-      segmentVideo.src = `file://${segmentPath}`; // This won't work in browser, need to serve the file
-      segmentVideo.crossOrigin = "anonymous";
-      segmentVideo.muted = true;
-
-      // For now, we'll create a demo video indicating we have the actual segment
-      // In a real implementation, you'd need to serve the downloaded file through an endpoint
 
       const supportedTypes = [
         "video/webm;codecs=vp9,opus",
         "video/webm;codecs=vp8,opus",
-        "video/webm;codecs=h264,opus",
         "video/webm",
         "video/mp4",
       ];
@@ -180,10 +270,20 @@ export default function ShortCreator() {
       const stream = canvas.captureStream(30);
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType,
-        videoBitsPerSegment: 2500000,
+        videoBitsPerSecond: 2500000,
       });
 
       const chunks: BlobPart[] = [];
+      let animationId: number;
+
+      const cleanup = () => {
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+        }
+        // Stop all tracks in the stream
+        stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+      };
+
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           chunks.push(event.data);
@@ -191,13 +291,19 @@ export default function ShortCreator() {
       };
 
       mediaRecorder.onstop = () => {
+        cleanup();
         const blob = new Blob(chunks, { type: mimeType });
         const url = URL.createObjectURL(blob);
+        
+        // Cleanup previous URL if it exists
+        if (generatedShortUrl) {
+          URL.revokeObjectURL(generatedShortUrl);
+        }
+        
         setGeneratedShortUrl(url);
         setIsGeneratingShort(false);
       };
 
-      // Start recording
       mediaRecorder.start(100);
 
       const duration = selectedShortData!.duration * 1000;
@@ -1146,7 +1252,7 @@ export default function ShortCreator() {
       console.error("Clip generation failed:", error);
     } finally {
       setIsGeneratingClips(false);
-      setTimeout(() => setGenerationProgress(0), 2000);
+      createManagedTimeout(() => setGenerationProgress(0), 2000);
     }
   };
 

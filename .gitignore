@@ -24,6 +24,13 @@
 .DS_Store
 *.pem
 
+# yt-dlp binary (will be downloaded automatically)
+/bin/
+
+# temporary video/audio files
+/temp_video/
+/temp_audio/
+
 # debug
 npm-debug.log*
 yarn-debug.log*

@@ -10,6 +10,19 @@ import path from 'path';
 import { getSubtitles } from "youtube-captions-scraper";
 import { YoutubeTranscript } from "youtube-transcript";
 
+// Use persistent yt-dlp installation
+const YTDLP_PATH = path.join(process.cwd(), 'bin', process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
+
+// Helper function to create YTDlpWrap with persistent binary
+const createYTDlpWrap = () => {
+  try {
+    return new YTDlpWrap(YTDLP_PATH);
+  } catch (error) {
+    console.warn('Using fallback yt-dlp installation:', error);
+    return new YTDlpWrap(); // Fallback to default installation
+  }
+};
+
 export const signUpAction = async (formData: FormData) => {
   const email = formData.get("email")?.toString();
   const password = formData.get("password")?.toString();
@@ -449,7 +462,7 @@ const getYouTubeTranscriptAlternative3 = async (
       `🔎 Fetching transcript using yt-dlp subtitles for: ${videoId}`,
     );
 
-    const ytDlpWrap = new YTDlpWrap();
+    const ytDlpWrap = createYTDlpWrap();
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
     // Get available subtitles without downloading video
@@ -691,7 +704,7 @@ const downloadYouTubeAudio = async (videoUrl: string): Promise<string> => {
   try {
     console.log("📥 Downloading YouTube audio...");
 
-    const ytDlpWrap = new YTDlpWrap();
+    const ytDlpWrap = createYTDlpWrap();
     const timestamp = Date.now();
     const tempDir = path.join(process.cwd(), "temp_audio");
 
@@ -916,7 +929,7 @@ const downloadFullYouTubeVideo = async (videoUrl: string): Promise<string> => {
   try {
     console.log(`📥 Downloading full YouTube video...`);
 
-    const ytDlpWrap = new YTDlpWrap();
+    const ytDlpWrap = createYTDlpWrap();
     const timestamp = Date.now();
     const tempDir = path.join(process.cwd(), "temp_video");
 
