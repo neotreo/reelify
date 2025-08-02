@@ -7,7 +7,7 @@ const fs = require('fs').promises;
 const path = require('path');
 
 // Test video ID (use a popular video that should have captions)
-const TEST_VIDEO_ID = 'dQw4w9WgXcQ'; // Rick Roll - should have captions
+const TEST_VIDEO_ID = 'jNQXAC9IVRw'; // "Me at the zoo" - first YouTube video, definitely has captions
 const TEST_VIDEO_URL = `https://www.youtube.com/watch?v=${TEST_VIDEO_ID}`;
 
 console.log('🔧 Starting transcript debugging...');
@@ -147,7 +147,7 @@ async function testYtDlpSubs() {
       '-o', `${outputPattern}.%(ext)s`
     ];
     
-    const command = `${ytdlpPath} "${TEST_VIDEO_URL}" --write-subs --write-auto-subs --sub-langs en --sub-format vtt --skip-download --no-warnings -o "${outputPattern}.%(ext)s"`;
+    const command = `${ytdlpPath} "${TEST_VIDEO_URL}" --write-subs --write-auto-subs --sub-langs en --sub-format vtt --skip-download --no-warnings --user-agent "Mozilla/5.0 (Linux x86_64) AppleWebKit/537.36" --referer "https://www.youtube.com/" -o "${outputPattern}.%(ext)s"`;
     
     console.log(`🔍 Running: ${command}`);
     
@@ -157,7 +157,7 @@ async function testYtDlpSubs() {
         console.log('Stderr:', stderr);
         
         // Try with system yt-dlp if local one fails
-        const systemCommand = `yt-dlp "${TEST_VIDEO_URL}" --write-subs --write-auto-subs --sub-langs en --sub-format vtt --skip-download --no-warnings -o "${outputPattern}.%(ext)s"`;
+        const systemCommand = `yt-dlp "${TEST_VIDEO_URL}" --write-subs --write-auto-subs --sub-langs en --sub-format vtt --skip-download --no-warnings --user-agent "Mozilla/5.0 (Linux x86_64) AppleWebKit/537.36" --referer "https://www.youtube.com/" -o "${outputPattern}.%(ext)s"`;
         console.log(`🔄 Trying system yt-dlp: ${systemCommand}`);
         
         exec(systemCommand, async (sysError, sysStdout, sysStderr) => {
@@ -211,7 +211,7 @@ async function testAudioDownload() {
   return new Promise((resolve, reject) => {
     const outputPattern = 'debug-audio';
     
-    const command = `${ytdlpPath} "${TEST_VIDEO_URL}" --extract-audio --audio-format wav --audio-quality 0 --no-warnings -o "${outputPattern}.%(ext)s"`;
+    const command = `${ytdlpPath} "${TEST_VIDEO_URL}" --extract-audio --audio-format wav --audio-quality 0 --no-warnings --user-agent "Mozilla/5.0 (Linux x86_64) AppleWebKit/537.36" --referer "https://www.youtube.com/" -o "${outputPattern}.%(ext)s"`;
     
     console.log(`🔍 Running: ${command}`);
     
@@ -221,7 +221,7 @@ async function testAudioDownload() {
         console.log('Stderr:', stderr);
         
         // Try with system yt-dlp
-        const systemCommand = `yt-dlp "${TEST_VIDEO_URL}" --extract-audio --audio-format wav --audio-quality 0 --no-warnings -o "${outputPattern}.%(ext)s"`;
+        const systemCommand = `yt-dlp "${TEST_VIDEO_URL}" --extract-audio --audio-format wav --audio-quality 0 --no-warnings --user-agent "Mozilla/5.0 (Linux x86_64) AppleWebKit/537.36" --referer "https://www.youtube.com/" -o "${outputPattern}.%(ext)s"`;
         console.log(`🔄 Trying system yt-dlp: ${systemCommand}`);
         
         exec(systemCommand, async (sysError, sysStdout, sysStderr) => {

@@ -512,10 +512,12 @@ const getYouTubeTranscriptAlternative3 = async (
         "--sub-format", "vtt",
         "--skip-download",
         "--no-warnings",
-        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "--user-agent", "Mozilla/5.0 (Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "--referer", "https://www.youtube.com/",
         "--retries", "3",
         "--fragment-retries", "3",
+        "--no-call-home",
+        "--no-mark-watched",
         "-o", path.join(process.cwd(), "temp_audio", `subs-${Date.now()}.%(ext)s`),
       ];
 
@@ -792,7 +794,7 @@ const downloadYouTubeAudio = async (videoUrl: string): Promise<string> => {
 
     const outputPath = path.join(tempDir, `audio-${timestamp}.%(ext)s`);
 
-    // Enhanced download arguments with better compatibility
+    // Enhanced download arguments with better compatibility and anti-bot measures
     const downloadArgs = [
       videoUrl,
       "--extract-audio",
@@ -801,12 +803,14 @@ const downloadYouTubeAudio = async (videoUrl: string): Promise<string> => {
       "--format", "bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio",
       "--no-warnings",
       "--no-check-certificates",
-      "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+      "--user-agent", "Mozilla/5.0 (Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "--referer", "https://www.youtube.com/",
       "--add-header", "Accept-Language:en-US,en;q=0.9",
       "--retries", "3",
       "--fragment-retries", "3",
       "--ignore-errors",
+      "--no-call-home",
+      "--no-mark-watched",
       "-o", outputPath,
     ];
 
