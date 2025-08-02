@@ -147,7 +147,7 @@ async function testYtDlpSubs() {
       '-o', `${outputPattern}.%(ext)s`
     ];
     
-    const command = `${ytdlpPath} "${TEST_VIDEO_URL}" --write-subs --write-auto-subs --sub-langs en --sub-format vtt --skip-download --no-warnings --user-agent "Mozilla/5.0 (Linux x86_64) AppleWebKit/537.36" --referer "https://www.youtube.com/" -o "${outputPattern}.%(ext)s"`;
+    const command = `${ytdlpPath} "${TEST_VIDEO_URL}" --cookies-from-browser --write-subs --write-auto-subs --sub-langs en --sub-format vtt --skip-download --no-warnings --user-agent "Mozilla/5.0 (Linux x86_64) AppleWebKit/537.36" --referer "https://www.youtube.com/" -o "${outputPattern}.%(ext)s"`;
     
     console.log(`🔍 Running: ${command}`);
     
@@ -157,7 +157,7 @@ async function testYtDlpSubs() {
         console.log('Stderr:', stderr);
         
         // Try with system yt-dlp if local one fails
-        const systemCommand = `yt-dlp "${TEST_VIDEO_URL}" --write-subs --write-auto-subs --sub-langs en --sub-format vtt --skip-download --no-warnings --user-agent "Mozilla/5.0 (Linux x86_64) AppleWebKit/537.36" --referer "https://www.youtube.com/" -o "${outputPattern}.%(ext)s"`;
+        const systemCommand = `yt-dlp "${TEST_VIDEO_URL}" --cookies-from-browser --write-subs --write-auto-subs --sub-langs en --sub-format vtt --skip-download --no-warnings --user-agent "Mozilla/5.0 (Linux x86_64) AppleWebKit/537.36" --referer "https://www.youtube.com/" -o "${outputPattern}.%(ext)s"`;
         console.log(`🔄 Trying system yt-dlp: ${systemCommand}`);
         
         exec(systemCommand, async (sysError, sysStdout, sysStderr) => {
@@ -211,7 +211,7 @@ async function testAudioDownload() {
   return new Promise((resolve, reject) => {
     const outputPattern = 'debug-audio';
     
-    const command = `${ytdlpPath} "${TEST_VIDEO_URL}" --extract-audio --audio-format wav --audio-quality 0 --no-warnings --user-agent "Mozilla/5.0 (Linux x86_64) AppleWebKit/537.36" --referer "https://www.youtube.com/" -o "${outputPattern}.%(ext)s"`;
+    const command = `${ytdlpPath} "${TEST_VIDEO_URL}" --extract-audio --cookies-from-browser --audio-format wav --audio-quality 0 --no-warnings --user-agent "Mozilla/5.0 (Linux x86_64) AppleWebKit/537.36" --referer "https://www.youtube.com/" -o "${outputPattern}.%(ext)s"`;
     
     console.log(`🔍 Running: ${command}`);
     
@@ -221,7 +221,7 @@ async function testAudioDownload() {
         console.log('Stderr:', stderr);
         
         // Try with system yt-dlp
-        const systemCommand = `yt-dlp "${TEST_VIDEO_URL}" --extract-audio --audio-format wav --audio-quality 0 --no-warnings --user-agent "Mozilla/5.0 (Linux x86_64) AppleWebKit/537.36" --referer "https://www.youtube.com/" -o "${outputPattern}.%(ext)s"`;
+        const systemCommand = `yt-dlp "${TEST_VIDEO_URL}" --extract-audio --cookies-from-browser --audio-format wav --audio-quality 0 --no-warnings --user-agent "Mozilla/5.0 (Linux x86_64) AppleWebKit/537.36" --referer "https://www.youtube.com/" -o "${outputPattern}.%(ext)s"`;
         console.log(`🔄 Trying system yt-dlp: ${systemCommand}`);
         
         exec(systemCommand, async (sysError, sysStdout, sysStderr) => {
