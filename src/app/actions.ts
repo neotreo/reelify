@@ -34,6 +34,48 @@ const createYTDlpWrap = () => {
   }
 };
 
+// Add cookie helpers
+const fileExists = async (p: string) => {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const getCookieFile = async (): Promise<string | null> => {
+  const envPath =
+    process.env.YT_COOKIES_FILE ||
+    process.env.YOUTUBE_COOKIES_FILE ||
+    process.env.YTDLP_COOKIES_FILE;
+  if (envPath && (await fileExists(envPath))) return envPath;
+
+  const local1 = path.join(process.cwd(), "bin", "youtube-cookies.txt");
+  if (await fileExists(local1)) return local1;
+
+  const local2 = path.join(process.cwd(), "cookies.txt");
+  if (await fileExists(local2)) return local2;
+
+  return null;
+};
+
+const getYtDlpCookieArgs = async (): Promise<string[]> => {
+  const args: string[] = [];
+  const file = await getCookieFile();
+  if (file) {
+    args.push("--cookies", file);
+    return args;
+  }
+  // Use a local browser profile during development
+  const browser =
+    process.env.YTDLP_BROWSER ||
+    process.env.YT_COOKIES_BROWSER ||
+    (process.platform === "win32" ? "chrome" : "");
+  if (browser) args.push("--cookies-from-browser", browser);
+  return args;
+};
+
 export const signUpAction = async (formData: FormData) => {
   const email = formData.get("email")?.toString();
   const password = formData.get("password")?.toString();
@@ -475,8 +517,8 @@ const getYouTubeTranscriptAlternative3 = async (
 
     const ytDlpWrap = createYTDlpWrap();
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const cookieArgs = await getYtDlpCookieArgs();
 
-    // Enhanced subtitle arguments for better compatibility
     const subtitleArgs = [
       videoUrl,
       "--list-subs",
@@ -487,29 +529,11 @@ const getYouTubeTranscriptAlternative3 = async (
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
       "--referer",
       "https://www.youtube.com/",
+      "--extractor-args",
+      "youtube:player_client=android,ios,web,mweb",
+      ...cookieArgs,
     ];
-
-    const subtitleInfo = await new Promise<string>((resolve, reject) => {
-      let stdoutData = "";
-      const emitter = ytDlpWrap.exec(subtitleArgs);
-
-      emitter.on("progress", (data: any) => {
-        stdoutData += data.toString();
-      });
-
-      emitter.on("error", reject);
-      emitter.on("close", (code: number) => {
-        if (code === 0) {
-          resolve(stdoutData);
-        } else {
-          reject(new Error(`yt-dlp subtitle list failed with code ${code}`));
-        }
-      });
-    });
-
-    // Check if subtitles are available
-    if (subtitleInfo.includes('"en"') || subtitleInfo.includes("auto")) {
-      // Download subtitles only with enhanced arguments
+// ...existing code...
       const downloadArgs = [
         videoUrl,
         "--write-subs",
@@ -530,8 +554,11 @@ const getYouTubeTranscriptAlternative3 = async (
         "3",
         "--no-call-home",
         "--no-mark-watched",
+        "--extractor-args",
+        "youtube:player_client=android,ios,web,mweb",
         "-o",
         path.join(process.cwd(), "temp_audio", `subs-${Date.now()}.%(ext)s`),
+        ...cookieArgs,
       ];
 
       await new Promise<void>((resolve, reject) => {
@@ -799,18 +826,11 @@ const downloadYouTubeAudio = async (videoUrl: string): Promise<string> => {
     const ytDlpWrap = createYTDlpWrap();
     const timestamp = Date.now();
     const tempDir = path.join(process.cwd(), "temp_audio");
-
-    // Ensure temp directory exists
-    try {
-      await fs.mkdir(tempDir, { recursive: true });
-    } catch (err) {
-      // Directory might already exist
-    }
+    await fs.mkdir(tempDir, { recursive: true });
 
     const outputPath = path.join(tempDir, `audio-${timestamp}.%(ext)s`);
-    const cookieFile = await getCookieFile();
+    const cookieArgs = await getYtDlpCookieArgs();
 
-    // Enhanced download arguments with better anti-bot measures
     const downloadArgs = [
       videoUrl,
       "--extract-audio",
@@ -846,11 +866,11 @@ const downloadYouTubeAudio = async (videoUrl: string): Promise<string> => {
       "--no-call-home",
       "--no-mark-watched",
       "--extractor-args",
-      "youtube:player_client=web,mweb",
+      "youtube:player_client=android,ios,web,mweb",
       "-o",
       outputPath,
+      ...cookieArgs,
     ];
-
     // Add cookies if available
     if (cookieFile) {
       downloadArgs.push("--cookies", cookieFile);
@@ -1101,26 +1121,24 @@ const downloadFullYouTubeVideo = async (videoUrl: string): Promise<string> => {
     const ytDlpWrap = createYTDlpWrap();
     const timestamp = Date.now();
     const tempDir = path.join(process.cwd(), "temp_video");
-
-    // Ensure temp directory exists
-    try {
-      await fs.mkdir(tempDir, { recursive: true });
-    } catch (err) {
-      // Directory might already exist
-    }
+    await fs.mkdir(tempDir, { recursive: true });
 
     const outputPath = path.join(
       tempDir,
       `original_video_${timestamp}.%(ext)s`,
     );
+    const cookieArgs = await getYtDlpCookieArgs();
 
     const downloadArgs = [
       videoUrl,
       "-f",
       "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
       "--no-warnings",
+      "--extractor-args",
+      "youtube:player_client=android,ios,web,mweb",
       "-o",
       outputPath,
+      ...cookieArgs,
     ];
 
     await new Promise<void>((resolve, reject) => {
