@@ -4,14 +4,18 @@ import { encodedRedirect } from "@/utils/utils";
 import { redirect } from "next/navigation";
 import { createClient } from "../../supabase/server";
 import YTDlpWrap from "yt-dlp-wrap";
-import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
+import { NextRequest, NextResponse } from "next/server";
+import fs from "fs/promises";
+import path from "path";
 import { getSubtitles } from "youtube-captions-scraper";
 import { YoutubeTranscript } from "youtube-transcript";
 
 // Use persistent yt-dlp installation
-const YTDLP_PATH = path.join(process.cwd(), 'bin', process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
+const YTDLP_PATH = path.join(
+  process.cwd(),
+  "bin",
+  process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp",
+);
 
 // Helper function to create YTDlpWrap with persistent binary
 const createYTDlpWrap = () => {
@@ -19,12 +23,12 @@ const createYTDlpWrap = () => {
     // Try local binary first
     return new YTDlpWrap(YTDLP_PATH);
   } catch (error) {
-    console.warn('Local yt-dlp not found, trying system installation:', error);
+    console.warn("Local yt-dlp not found, trying system installation:", error);
     try {
       // Try system installation
-      return new YTDlpWrap('yt-dlp');
+      return new YTDlpWrap("yt-dlp");
     } catch (systemError) {
-      console.warn('System yt-dlp not found, using default:', systemError);
+      console.warn("System yt-dlp not found, using default:", systemError);
       return new YTDlpWrap(); // Fallback to default installation
     }
   }
@@ -479,8 +483,10 @@ const getYouTubeTranscriptAlternative3 = async (
       "--skip-download",
       "--no-warnings",
       "--print-json",
-      "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      "--referer", "https://www.youtube.com/",
+      "--user-agent",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "--referer",
+      "https://www.youtube.com/",
     ];
 
     const subtitleInfo = await new Promise<string>((resolve, reject) => {
@@ -508,17 +514,24 @@ const getYouTubeTranscriptAlternative3 = async (
         videoUrl,
         "--write-subs",
         "--write-auto-subs",
-        "--sub-langs", "en,en-US,en-GB",
-        "--sub-format", "vtt",
+        "--sub-langs",
+        "en,en-US,en-GB",
+        "--sub-format",
+        "vtt",
         "--skip-download",
         "--no-warnings",
-        "--user-agent", "Mozilla/5.0 (Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "--referer", "https://www.youtube.com/",
-        "--retries", "3",
-        "--fragment-retries", "3",
+        "--user-agent",
+        "Mozilla/5.0 (Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "--referer",
+        "https://www.youtube.com/",
+        "--retries",
+        "3",
+        "--fragment-retries",
+        "3",
         "--no-call-home",
         "--no-mark-watched",
-        "-o", path.join(process.cwd(), "temp_audio", `subs-${Date.now()}.%(ext)s`),
+        "-o",
+        path.join(process.cwd(), "temp_audio", `subs-${Date.now()}.%(ext)s`),
       ];
 
       await new Promise<void>((resolve, reject) => {
@@ -539,7 +552,9 @@ const getYouTubeTranscriptAlternative3 = async (
       const tempDir = path.join(process.cwd(), "temp_audio");
       const files = await fs.readdir(tempDir);
       const vttFile = files.find(
-        (file) => file.includes("subs-") && (file.endsWith(".vtt") || file.endsWith(".en.vtt")),
+        (file) =>
+          file.includes("subs-") &&
+          (file.endsWith(".vtt") || file.endsWith(".en.vtt")),
       );
 
       if (vttFile) {
@@ -665,7 +680,7 @@ const getYouTubeTranscript = async (
   videoId: string,
 ): Promise<string | null> => {
   console.log(`🔎 Fetching captions for video ID: ${videoId}`);
-  
+
   // 1) youtube-captions-scraper (fastest method)
   try {
     console.log("Trying youtube-captions-scraper...");
@@ -776,7 +791,7 @@ const getYouTubeTranscript = async (
   return null;
 };
 
-// Helper function to download YouTube audio using yt-dlp
+// Enhanced download with cookie support
 const downloadYouTubeAudio = async (videoUrl: string): Promise<string> => {
   try {
     console.log("📥 Downloading YouTube audio...");
@@ -793,26 +808,54 @@ const downloadYouTubeAudio = async (videoUrl: string): Promise<string> => {
     }
 
     const outputPath = path.join(tempDir, `audio-${timestamp}.%(ext)s`);
+    const cookieFile = await getCookieFile();
 
-    // Enhanced download arguments with better compatibility and anti-bot measures
+    // Enhanced download arguments with better anti-bot measures
     const downloadArgs = [
       videoUrl,
       "--extract-audio",
-      "--audio-format", "wav",
-      "--audio-quality", "0",
-      "--format", "bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio",
+      "--audio-format",
+      "wav",
+      "--audio-quality",
+      "0",
+      "--format",
+      "bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio",
       "--no-warnings",
       "--no-check-certificates",
-      "--user-agent", "Mozilla/5.0 (Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "--referer", "https://www.youtube.com/",
-      "--add-header", "Accept-Language:en-US,en;q=0.9",
-      "--retries", "3",
-      "--fragment-retries", "3",
+      "--user-agent",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "--referer",
+      "https://www.youtube.com/",
+      "--add-header",
+      "Accept:*/*",
+      "--add-header",
+      "Accept-Language:en-US,en;q=0.9",
+      "--add-header",
+      "Accept-Encoding:gzip, deflate, br",
+      "--add-header",
+      "Connection:keep-alive",
+      "--retries",
+      "5",
+      "--fragment-retries",
+      "5",
+      "--sleep-interval",
+      "1",
+      "--max-sleep-interval",
+      "5",
       "--ignore-errors",
       "--no-call-home",
       "--no-mark-watched",
-      "-o", outputPath,
+      "--extractor-args",
+      "youtube:player_client=web,mweb",
+      "-o",
+      outputPath,
     ];
+
+    // Add cookies if available
+    if (cookieFile) {
+      downloadArgs.push("--cookies", cookieFile);
+      console.log("🍪 Using cookie file for authentication");
+    }
 
     let stdoutData = "";
     let stderrData = "";
@@ -842,7 +885,11 @@ const downloadYouTubeAudio = async (videoUrl: string): Promise<string> => {
           console.error("yt-dlp failed with exit code:", code);
           console.error("stdout:", stdoutData);
           console.error("stderr:", stderrData);
-          reject(new Error(`yt-dlp failed with exit code ${code}. Error: ${stderrData || 'Unknown error'}`));
+          reject(
+            new Error(
+              `yt-dlp failed with exit code ${code}. Error: ${stderrData || "Unknown error"}`,
+            ),
+          );
         }
       });
     });
@@ -850,17 +897,21 @@ const downloadYouTubeAudio = async (videoUrl: string): Promise<string> => {
     // Find the downloaded file with better file detection
     const files = await fs.readdir(tempDir);
     console.log("Files in temp directory:", files);
-    
-    const audioFile = files.find(
-      (file) => {
-        const isTimestampMatch = file.includes(`audio-${timestamp}`);
-        const isAudioFormat = file.endsWith(".wav") || file.endsWith(".m4a") || file.endsWith(".mp3") || file.endsWith(".opus");
-        return isTimestampMatch && isAudioFormat;
-      }
-    );
+
+    const audioFile = files.find((file) => {
+      const isTimestampMatch = file.includes(`audio-${timestamp}`);
+      const isAudioFormat =
+        file.endsWith(".wav") ||
+        file.endsWith(".m4a") ||
+        file.endsWith(".mp3") ||
+        file.endsWith(".opus");
+      return isTimestampMatch && isAudioFormat;
+    });
 
     if (!audioFile) {
-      throw new Error(`Downloaded audio file not found. Files in directory: ${files.join(", ")}`);
+      throw new Error(
+        `Downloaded audio file not found. Files in directory: ${files.join(", ")}`,
+      );
     }
 
     const audioPath = path.join(tempDir, audioFile);
@@ -872,12 +923,16 @@ const downloadYouTubeAudio = async (videoUrl: string): Promise<string> => {
       throw new Error("Downloaded audio file is empty");
     }
 
-    console.log(`📊 Audio file size: ${Math.round(stats.size / 1024 / 1024 * 100) / 100} MB`);
+    console.log(
+      `📊 Audio file size: ${Math.round((stats.size / 1024 / 1024) * 100) / 100} MB`,
+    );
 
     return audioPath;
   } catch (error) {
     console.error("YouTube audio download error:", error);
-    throw new Error(`Failed to download YouTube audio: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Failed to download YouTube audio: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 };
 
@@ -1223,27 +1278,30 @@ export const processVideoWithAI = async (videoUrl: string) => {
         console.log("✅ AssemblyAI transcription completed successfully!");
       } catch (transcriptionError) {
         console.error("AssemblyAI transcription failed:", transcriptionError);
-        
+
         // Enhanced error message with more details
-        const errorMessage = transcriptionError instanceof Error 
-          ? transcriptionError.message 
-          : String(transcriptionError);
-          
+        const errorMessage =
+          transcriptionError instanceof Error
+            ? transcriptionError.message
+            : String(transcriptionError);
+
         throw new Error(
           "Unable to process this video: Failed to download and transcribe the audio. " +
-          "This might be due to the video being age-restricted, private, or region-blocked, " +
-          "or the audio file being corrupted. Please try with a different video that is publicly accessible. " +
-          `Technical details: ${errorMessage}`,
+            "This might be due to the video being age-restricted, private, or region-blocked, " +
+            "or the audio file being corrupted. Please try with a different video that is publicly accessible. " +
+            `Technical details: ${errorMessage}`,
         );
       }
     }
 
     if (!transcript || !transcript.text) {
       // FALLBACK: Create a basic transcript for demo/testing purposes
-      console.log("🔄 All transcript methods failed. Using fallback approach...");
+      console.log(
+        "🔄 All transcript methods failed. Using fallback approach...",
+      );
       transcript = {
         text: "This video contains engaging content that can be transformed into viral short-form videos. The content includes valuable insights, tips, and moments that would be perfect for social media platforms like TikTok, Instagram Reels, and YouTube Shorts.",
-        words: []
+        words: [],
       };
       console.log("✅ Using fallback transcript to continue processing");
     }
