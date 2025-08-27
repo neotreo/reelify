@@ -533,7 +533,8 @@ const getYouTubeTranscriptAlternative3 = async (
       "youtube:player_client=android,ios,web,mweb",
       ...cookieArgs,
     ];
-// ...existing code...
+
+    try {
       const downloadArgs = [
         videoUrl,
         "--write-subs",
@@ -612,6 +613,8 @@ const getYouTubeTranscriptAlternative3 = async (
           return transcript;
         }
       }
+    } catch (downloadError) {
+      console.log("yt-dlp subtitle download failed:", downloadError);
     }
 
     return null;
@@ -871,6 +874,7 @@ const downloadYouTubeAudio = async (videoUrl: string): Promise<string> => {
       outputPath,
       ...cookieArgs,
     ];
+    const cookieFile = await getCookieFile();
     // Add cookies if available
     if (cookieFile) {
       downloadArgs.push("--cookies", cookieFile);
